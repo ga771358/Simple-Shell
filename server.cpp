@@ -5,89 +5,113 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <cstdlib>
+#include <errno.h>
+#include<string.h>
+#include <map>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 using namespace std;
+#define MAXERR 100
+#define MAXLIEN 15000
 
 
-int findenv(const string& input,const vector<string >& env){
-	for(vector<string>::const_iterator str = env.begin(); str != env.end(); str++){
-		string::size_type found = str->find("=");
-		if (found != string::npos) {
-			string var(str->substr(0,found));
-			if(input == var) return str - env.begin();
-		}
-	}
-	return -1;
-}
 int main(int argc, char* argv[], char* envp[]){
 
-	ifstream ifs ( "welcome.txt" , ifstream::in );
-	string hello_m,command,tok;
-	vector<string> env;
-	for(int i = 0; envp[i] != 0; i++) {
-		env.push_back(envp[i]);
-	}
+	string message,command,line,tok;
 
-	while(getline(ifs, hello_m)) {
-		cout << hello_m << endl;
-	}
-
+	cout << "****************************************\n** Welcome to the information server. **\n****************************************" << endl;
 	
-	int path = findenv("PATH",env);
+	setenv("PATH","bin:.", 1);
+
 	while(true) {
 		cout << "% ";
 		getline(cin, command);
 		
-		istringstream CMD(command);
-		CMD >> tok;
-		if(tok == "printenv") {
-			if(CMD >> tok){
-				int pos = findenv(tok,env);
-				if(pos != -1) cout << env[pos] << endl;
-			}		
-		}
-		else if(tok == "setenv"){
-			if(CMD >> tok){
-				int pos = findenv(tok,env);
-				if(pos != -1) {
-					string var(tok);
-					if(CMD >> tok) env[pos] = var + "=" + tok;
-				}
-			}
-		}
-		else {
+		istringstream line(command);
+		while(line >> tok){
+			vector<string > Arglist;
+			enum state{ FILE, NOT_FILE };
+			state s = NOT_FILE;
+			char filename[20]={0};
 
-			/*FORK ONE PROCESS*/
-			pid_t pid = fork();
-			
-			vector<string> Arglist;
-			Arglist.push_back(tok);
-			while(CMD >> tok) {
-				Arglist.push_back(tok);
+			do {
+				if(tok[0] == '|') break; ///
+				if(tok[0] != '>') {
+					if(s == FILE) {
+						break;
+					}
+					Arglist.push_back(tok);
+				}
+				else {
+					s = FILE;
+				}	
 			}
-			const char** arglist = new const char* [Arglist.size()+1]; //
+			while(line >> tok); ///
+
+			const char** arglist = new const char* [Arglist.size()+1];
 			int i;
 			for(i = 0 ; i < Arglist.size(); i++) {
 				arglist[i] = Arglist[i].c_str();
 			}
 			arglist[i] = NULL; //
-			if(pid < 0) {
+			//read arg//
 
-			}
-			else if(pid == 0) {
-				
-				//exec
-				string::size_type arg = env[path].find("=");
-				if(execv((env[path].substr(arg+1)+"/"+Arglist[0]).c_str(), (char*const*)arglist) < 0) { //
-					exit(1);
-				}
-				exit(0);
+			int file_fd,err_fd[2];
+
+			char err_buf[MAXERR] = {0};
+			if(s == NOT_FILE){
+				pipe(err_fd);
 			}
 			else {
+				pipe(err_fd);
+				file_fd = open(tok.c_str(), O_RDWR | O_CREAT, "0666");
+				if(file_fd < 0) {
+					cout << "open error" << endl;
+					break;
+				}
+				
+			}
+
+			pid_t pid = fork();
+			if(pid < 0) {
+				cout << "fork error" << endl;
+			}
+			else if(pid == 0) {
+			
+				close(err_fd[0]);
+				dup2(err_fd[1],2);
+				close(err_fd[1]);
+				
+				if(s == FILE) {
+					dup2(file_fd,1);
+					close(file_fd);
+				}
+				
+				//exec
+				if(execvp(arglist[0], (char*const*)arglist) < 0) { //
+					exit(errno);
+				}
+			}
+			else {
+				close(file_fd);
+				close(err_fd[1]);
 				int status = -1;
-        		wait(&status);
-        		cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
-        		
+	    		wait(&status);
+	    		if(WEXITSTATUS(status) > 0) {
+	        		if(read(err_fd[0],err_buf,MAXERR) > 0) {
+	        			cout << err_buf;
+	        			break;
+	        		}
+	        		else {
+	        			cout << "Unknown Command: [" << Arglist[0] << "]" << endl;
+	        			break;
+	        		}
+	    		}
+	    		close(err_fd[0]);
+	    		//cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
 			}
 		}
+		
 	}
 }
