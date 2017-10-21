@@ -144,12 +144,6 @@ int main(int argc, char* argv[], char* envp[]){
 				exit(0); //close all fd
 			}
 			else {
-				
-				//if(s == PIPE) {
-					//close(data_fd[1]);
-					//cout << step << endl;
-				
-				//}
 
 				close(file_fd);
 				close(err_fd[1]);
@@ -158,35 +152,34 @@ int main(int argc, char* argv[], char* envp[]){
 	    		if(WEXITSTATUS(status) > 0) {
 	        		if(read(err_fd[0],err_buf,MAXERR) > 0) {
 	        			cout << err_buf;
-	        			close(err_fd[0]);
-	        			break;
 	        		}
 	        		else {
 	        			cout << "Unknown Command: [" << Arglist[0] << "]" << endl;
-	        			break;
 	        		}
 	    		}
 	    		else {
 
 	    			if(read(err_fd[0],err_buf,MAXERR) > 0) {
 	        			cout << err_buf;
-	        			close(err_fd[0]);
-	        			break;
 	        		}
-	        		else if(s == END && Arglist[0] == "removetag0"){
-	        			close(data_fd[1]);
-		        		if(read(data_fd[0],data_buf,MAXLINE) > 0) {
-		        			cout << data_buf;
-		        			close(data_fd[0]);
-		        			break;
-		        		}
+	        		else { 
+	        			if(s == END && Arglist[0] == "removetag0"){
+		        			close(data_fd[1]);
+			        		if(read(data_fd[0],data_buf,MAXLINE) > 0) {
+			        			cout << data_buf;
+			        			close(data_fd[0]);
+			        		}
+			        	}
+			        	else {
+			        		if(pipe_table.find(step) != pipe_table.end()){
+								close(pipe_table[step].first);
+								close(pipe_table[step].second);
+								pipe_table.erase(pipe_table.find(step));
+							}
+						}
 	        		}
 
-	    			if(pipe_table.find(step) != pipe_table.end()){
-						close(pipe_table[step].first);
-						close(pipe_table[step].second);
-						pipe_table.erase(pipe_table.find(step));
-					}
+	    			
 	    		}
 	    		close(err_fd[0]);
 	    		
