@@ -83,7 +83,6 @@ int main(int argc, char* argv[], char* envp[]){
 
 			char err_buf[MAXERR] = {0}; ///?
 			if(s == PIPE){
-				pipe(err_fd);
 				
 				if(pipe_table.find(step+next) == pipe_table.end()) {
 					pipe(data_fd);
@@ -97,7 +96,6 @@ int main(int argc, char* argv[], char* envp[]){
 					
 			}
 			else if(s == FILE) {
-				pipe(err_fd);
 				file_fd = open(tok.c_str(), O_RDWR | O_CREAT, "0666");
 				if(file_fd < 0) {
 					cout << "open error" << endl;
@@ -106,8 +104,7 @@ int main(int argc, char* argv[], char* envp[]){
 				
 			}
 			else {
-				pipe(err_fd);
-				if(Arglist[0] == "removetag0") pipe(data_fd);
+				//pipe(data_fd);
 			}
 
 
@@ -122,7 +119,7 @@ int main(int argc, char* argv[], char* envp[]){
 					close(pipe_table[step].second);
 					//pipe_table.erase(pipe_table.find(step));
 				}
-				if(s == PIPE || ((s == END) && Arglist[0] == "removetag0")) {
+				if(s == PIPE) {
 					close(data_fd[0]);
 					dup2(data_fd[1],1);
 					close(data_fd[1]);
@@ -131,57 +128,36 @@ int main(int argc, char* argv[], char* envp[]){
 					dup2(file_fd,1);
 					close(file_fd);
 				}
-
-				close(err_fd[0]);
-				dup2(err_fd[1],2);
-				close(err_fd[1]);
 				
 				//exec
-				if(execvp(arglist[0], (char*const*)arglist) < 0) { //
+				string path("bin/");
+				int file;
+				if((file = open((path+Arglist[0]).c_str(),O_RDONLY)) < 0) {
+					cout << "Unknown Command [" << Arglist[0] << "]" << endl;
 					exit(errno);
+				}
+				else {
+					close(file);
+					if(execvp(arglist[0], (char*const*)arglist) < 0) { //
+						exit(errno);
+					}
 				}
 
 				exit(0); //close all fd
 			}
 			else {
 
-				close(file_fd);
-				close(err_fd[1]);
+				if(s == FILE) close(file_fd);
 				int status = -1;
 	    		wait(&status);
-	    		if(WEXITSTATUS(status) > 0) {
-	        		if(read(err_fd[0],err_buf,MAXERR) > 0) {
-	        			cout << err_buf;
-	        		}
-	        		else {
-	        			cout << "Unknown Command: [" << Arglist[0] << "]" << endl;
-	        		}
-	    		}
-	    		else {
-
-	    			if(read(err_fd[0],err_buf,MAXERR) > 0) {
-	        			cout << err_buf;
-	        		}
-	        		else { 
-	        			if(s == END && Arglist[0] == "removetag0"){
-		        			close(data_fd[1]);
-			        		if(read(data_fd[0],data_buf,MAXLINE) > 0) {
-			        			cout << data_buf;
-			        			close(data_fd[0]);
-			        		}
-			        	}
-			        	else {
-			        		if(pipe_table.find(step) != pipe_table.end()){
-								close(pipe_table[step].first);
-								close(pipe_table[step].second);
-								pipe_table.erase(pipe_table.find(step));
-							}
-						}
-	        		}
-
-	    			
-	    		}
-	    		close(err_fd[0]);
+	    		
+	        	
+        		if(pipe_table.find(step) != pipe_table.end()){
+					close(pipe_table[step].first);
+					close(pipe_table[step].second);
+					pipe_table.erase(pipe_table.find(step));
+				}
+        	
 	    		
 	    		//cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
 			}
