@@ -1,6 +1,5 @@
 #include<iostream>
-#include<fstream>
-#include <sstream>
+#include<sstream>
 #include<vector>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -11,27 +10,24 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include<utility>
+
 using namespace std;
 #define MAXERR 100
 #define MAXLINE 1000
 
-
 int main(int argc, char* argv[], char* envp[]){
 
 	string input,tok;
-
-	cout << "****************************************\n** Welcome to the information server. **\n****************************************" << endl;
-	
+	cout << "****************************************\n** Welcome to the information server. **\n****************************************" << endl;	
 	setenv("PATH","bin:.", 1);
 
-	int step = 0, next;
+	int step = 0, next, back_step = 0,first;
 	map<int,pair<int,int> > pipe_table;
 
 	while(true) {
 		cout << "% ";
 		getline(cin, input);
-
+		first = 1;
 		istringstream line(input);
 		while(line >> tok){
 			step++;
@@ -70,9 +66,8 @@ int main(int argc, char* argv[], char* envp[]){
 			//read arg//
 
 			int file_fd,err_fd[2],data_fd[2],tag_fd[2];
-
 			pipe(err_fd);
-			if(Arglist[0] == "removetag0") pipe(tag_fd);
+			pipe(tag_fd);
 
 			if(s == PIPE){
 				
@@ -100,115 +95,128 @@ int main(int argc, char* argv[], char* envp[]){
 			}
 
 			if(Arglist[0] == "setenv") {
-					setenv(arglist[1],arglist[2],1);
-					break;
-			}
-
-			pid_t pid = fork();
-			if(pid < 0) {
-				cout << "fork error" << endl;
+				if(arglist[2] != NULL) setenv(arglist[1],arglist[2],1);
 				break;
 			}
-			else if(pid == 0) {
-				if(pipe_table.find(step) != pipe_table.end()) {
-					dup2(pipe_table[step].first, 0);
-					close(pipe_table[step].second);
-					//pipe_table.erase(pipe_table.find(step));
-				}
-				if(s == PIPE) {
-					//close(data_fd[0]);
-					if(Arglist[0] == "removetag0") dup2(tag_fd[1],1);
-					else dup2(data_fd[1],1);
-					//close(data_fd[1]);
-				}
-				else if(s == FILE){
-					dup2(file_fd,1);
-					close(file_fd);
-				}
-				else {
-					if(Arglist[0] == "removetag0") dup2(tag_fd[1],1);
-					else dup2(data_fd[1],1);
-				}
-				dup2(err_fd[1],2);
-				//close(2);
-				if(Arglist[0] == "printenv") {
 
-						char* val = getenv(arglist[1]);
-						if(arglist[2] == NULL) {
-							if(val != NULL) cout << Arglist[1] << "=" << val << endl;
-							else cout << "No such env" << endl;
+			string searchpath("bin/");
+			int test_fd;
+			if(Arglist[0] != "printenv" && (test_fd = open((searchpath+Arglist[0]).c_str(),O_RDONLY)) < 0) {
+				cout << "Unknown Command: [" << Arglist[0] << "]." << endl;
+				if(!first) back_step++;
+				first = 0;
+				break;
+			}
+			else {
+				if(Arglist[0] != "printenv") {
+					string syspath(getenv("PATH"));
+					int found = 0;
+					while((found = syspath.find(":")) != string::npos) {
+						if(syspath.substr(0,found) == "bin") break;
+						syspath = syspath.substr(found+1);
+					}
+					first = 0;
+					if(found == string::npos) {
+						if(syspath != "bin") {
+							cout << "Unknown Command: [" << Arglist[0] << "]." << endl;
+							break;
 						}
-						else cout << "Wrong argument number for printenv" << endl;
-						exit(0);
+					}
 				}
-				//exec
-				string searchpath("bin/");
-				int test_fd;
-				if((test_fd = open((searchpath+Arglist[0]).c_str(),O_RDONLY)) < 0) {
-					cout << "Unknown Command [" << Arglist[0] << "]" << endl;
-					exit(errno);
+				pid_t pid = fork();
+				if(pid < 0) {
+					cout << "fork error" << endl;
+					break;
 				}
-				else {
+				else if(pid == 0) {
+
+					if(pipe_table.find(step - back_step) != pipe_table.end()) {
+						dup2(pipe_table[step - back_step].first, 0);
+						close(pipe_table[step - back_step].second);
+						//cout << Arglist[0] << endl;
+						//pipe_table.erase(pipe_table.find(step));
+					}
+					
+					if(s == PIPE) {
+						//close(data_fd[0]);
+						dup2(data_fd[1],1);
+						//close(data_fd[1]);
+					}
+					else if(s == FILE){
+						dup2(file_fd,1);
+						close(file_fd);
+					}
+					else {
+						dup2(data_fd[1],1);
+					}
+					dup2(err_fd[1],2);
+					//close(2);
+					if(Arglist[0] == "printenv") {
+
+							char* val = getenv(arglist[1]);
+							if(arglist[2] == NULL) {
+								if(val != NULL) cout << Arglist[1] << "=" << val << endl;
+								else cout << "No such env" << endl;
+							}
+							else cout << "Wrong argument number for printenv" << endl;
+							exit(0);
+					}
+					//exec
+					
 					close(test_fd);
 
 					if(execvp(arglist[0], (char*const*)arglist) < 0) { //
 						exit(errno);
 					}
-				}
 
-				exit(0); //close all fd
-			}
-			else {
-
-				if(pipe_table.find(step) != pipe_table.end()){
-					close(pipe_table[step].first);
-					close(pipe_table[step].second);
-					pipe_table.erase(pipe_table.find(step));
-				}
-				int backfd;
-				close(err_fd[1]);
-				close(tag_fd[1]);
-				if(s == END) 
-					close(data_fd[1]);
-				else {
-					backfd = dup(1);
-					dup2(data_fd[1],1);
-				}
-
-				if(read(err_fd[0],err_buf,MAXERR) > 0) {
-					cout << err_buf;
+					exit(0); //close all fd
 				}
 				else {
-					if(Arglist[0] == "removetag0") {
-						int n;
-						while((n = read(tag_fd[0],data_buf,MAXLINE)) > 0) {
-							write(1,data_buf,n);
+					map<int, pair<int,int> >::iterator it;
+					if((it = pipe_table.find(step - back_step)) != pipe_table.end()){
+						close(pipe_table[step - back_step].first);
+						close(pipe_table[step - back_step].second);
+						pipe_table.erase(it);
+					}
+					int backfd;
+					close(err_fd[1]);
+					close(tag_fd[1]);
+					if(s == END) 
+						close(data_fd[1]);
+					else {
+						//backfd = dup(1);
+						//dup2(data_fd[1],1);
+					}
+
+					if(read(err_fd[0],err_buf,MAXERR) > 0) {
+						cout << err_buf;
+					}
+					else {
+						
+						if(s == END) {
+							while(read(data_fd[0],data_buf,MAXLINE) > 0) {
+								cout << data_buf;
+								memset(data_buf,sizeof(data_buf),0);
+							}
 						}
 					}
-					if(s == END) {
-						while(read(data_fd[0],data_buf,MAXLINE) > 0) {
-							cout << data_buf;
-							memset(data_buf,sizeof(data_buf),0);
-						}
+					close(err_fd[0]);
+					close(tag_fd[0]);
+					if(s == FILE) close(file_fd);
+					else if(s == END) {
+						close(data_fd[0]);
 					}
+					else {
+						//dup2(backfd,1);
+						//close(backfd);
+					}	
+					int status = -1;
+		    		wait(&status);
+		    		//cout << Arglist[0] << " " << step << endl;
+		    		if(WEXITSTATUS(status) > 0) break;
+		    		//cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
 				}
-				close(err_fd[0]);
-				close(tag_fd[0]);
-				if(s == FILE) close(file_fd);
-				else if(s == END) {
-					close(data_fd[0]);
-				}
-				else {
-					dup2(backfd,1);
-					close(backfd);
-				}	
-				int status = -1;
-	    		wait(&status);
-
-	    		//cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
 			}
-
 		}
-		
 	}
 }
