@@ -14,7 +14,6 @@
 #include <netinet/in.h>
 
 using namespace std;
-#define MAXERR 100
 #define MAXLINE 15000
 #define MAXCONN 1000
 
@@ -45,16 +44,16 @@ int TcpListen(struct sockaddr_in* servaddr,socklen_t servlen,int port){
     return listenfd;
 }
 
-void readline(int sockfd,char* buf){
-    int n,len = 0;
-    while((n = read(sockfd, &buf[len], 1)) > 0) {
-        if(buf[len] !='\n') ++len;
+int readline(int sockfd,char* ptr){
+    while(read(sockfd, ptr, 1) > 0) {
+        if(*ptr !='\n') ++ptr;
         else {
-            buf[len++] = 0;
-            break;
+            *ptr = 0;
+            return 1;
         }
-        if(len == MAXLINE) len = 0;
     }
+    close(sockfd);
+    return 0;
 }
 
 int redirect(int oldfd,int newfd) {
@@ -90,9 +89,10 @@ serv_next:
         while(true) {
                       
             write(connfd,"% ",2);
-            char buf[MAXLINE]={0},response[MAXLINE] = {0};
-            readline(connfd, buf);
-            string input(buf),tok;
+            char buf[MAXLINE] = {0},response[MAXLINE] = {0};
+            if(!readline(connfd, buf)) break;
+         
+            string input(buf), tok;
             first = 1;
             istringstream line(input);
             
@@ -110,7 +110,7 @@ serv_next:
                         else next = 1;
                         
                         s = PIPE;
-                        break; ///
+                        break;
                     }
                     if(tok[0] != '>') {
                         if(s == FILE) {
@@ -120,12 +120,13 @@ serv_next:
                     }
                     else s = FILE;
                 }
-                while(line >> tok); ///
+                while(line >> tok); 
                 
                 if(Arglist.empty()) continue;
+
                 if(Arglist[0] == "exit") {
                     close(connfd);
-        	    goto serv_next;            
+        	    	goto serv_next;            
                 }
                 
                 const char** arglist = new const char* [Arglist.size()+1];
@@ -133,7 +134,7 @@ serv_next:
                 for(i = 0 ; i < Arglist.size(); i++) {
                     arglist[i] = Arglist[i].c_str();
                 }
-                arglist[i] = NULL; //
+                arglist[i] = NULL; 
                 //read arg//
                 int file_fd,data_fd[2];
                 char data_buf[MAXLINE] = {0};
@@ -142,7 +143,6 @@ serv_next:
                     if(arglist[2] != NULL) setenv(arglist[1],arglist[2], 1);
                     break;
                 }
-                 
                 if(Arglist[0] != "printenv") {
                     string syspath(getenv("PATH"));
                     int found_pos = 0,found = 0,test_fd = -1;
@@ -167,11 +167,10 @@ serv_next:
                             remove_pipe(pipe_table,step);
                         }
                         if(!first) step--;
-                        if(s == FILE) close(file_fd);
                     }
-                    first = 0;
+                    if(first) first = 0;
                     if(!found) break;
-                    
+                 
                     close(test_fd);
                 }
                 
@@ -196,9 +195,7 @@ serv_next:
                 pid_t pid = fork();
                 if(pid == 0) {
                     
-                    //cout << step << endl;
                     if(pipe_table.find(step) != pipe_table.end()) {
-                        cout << step << endl;
                         dup2(pipe_table[step].first, 0);
                         close(pipe_table[step].second);
                     }
@@ -222,7 +219,6 @@ serv_next:
                     }
                     
                     if(execvp(arglist[0], (char*const*)arglist) < 0) exit(errno);
-                    exit(0); //close all fd
                 }
                 else {
                     remove_pipe(pipe_table,step);
@@ -233,7 +229,7 @@ serv_next:
                     if(s == END) { //end of pipe
                         while((n = read(data_fd[0],data_buf,MAXLINE)) > 0) {
                             write(connfd, data_buf, n);
-                            memset(data_buf,0,sizeof(data_buf));
+                            memset(data_buf, 0, sizeof(data_buf));
                         }
                         //endofpipe(back_step,step,number_pipe);
                     }
