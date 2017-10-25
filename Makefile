@@ -1,6 +1,5 @@
 all: server 
 
 server: server.cpp
-	g++ -g server.cpp -o server
-
+	g++ -g server.cpp -o ../server
 
