@@ -102,21 +102,52 @@ serv_next:
             if(!readline(connfd, buf)) break;
          
             string input(buf), tok;
-            first = 1;
-            istringstream line(input);
+            int first = 1,isProgram = 1,count = 0, cnt = 0,found = 0,found_pos,test_fd;
+            istringstream line(input),preparsing(input);
+            while(preparsing >> tok) {
+
+            	if(isProgram) {
+            		count++;
+            		if(!(tok == "exit" || tok == "setenv" || tok == "printenv")) {
+            			string syspath(getenv("PATH"));
+	                    found_pos = 0,found = 0,test_fd = -1;
+	                    
+	                    while((found_pos = syspath.find(":")) != string::npos) {
+	                        if((test_fd = open((syspath.substr(0,found_pos)+"/"+tok).c_str(),O_RDONLY)) > 0) {
+	                            found = 1;
+	                            break;
+	                        }
+	                        syspath = syspath.substr(found_pos+1);
+	                    }
+	                    if(!found && found_pos == string::npos) {
+	                        if((test_fd = open((syspath+"/"+tok).c_str(),O_RDONLY)) > 0) {
+	                            found = 1;
+	                        }
+	                    }
+	                    if(!found) break;
+	                    close(test_fd);
+            		}            
+                }
+                if(tok[0] == '|') isProgram = 1;
+            	else isProgram = 0; 
+            }
+            if(found) count = -1;
             
             while(line >> tok){
-                step++;
+                step++, cnt++;
                 vector<string> Arglist;
                 state s = END;
-                
+               
                 do {
                     if(tok[0] == '|') {
                         if(tok.size() != 1) {
                             next = atoi(tok.substr(1,tok.size()-1).c_str());
                             notremove[step+next] = 1;
                         }
-                        else next = 1;
+                        else {
+                        	next = 1;
+                        	if(count == cnt + 1) break;
+                        }
                         
                         s = PIPE;
                         break;
@@ -130,59 +161,43 @@ serv_next:
                     else s = FILE;
                 }
                 while(line >> tok); 
+
+                first = 0;
                 
+                if(tok == "|" && count == cnt + 1) continue;
+
                 if(Arglist.empty()) continue;
 
-                if(Arglist[0] == "exit") {
-                    close(connfd);
-        	    	goto serv_next;            
-                }
-                
                 const char** arglist = new const char* [Arglist.size()+1];
                 int i;
                 for(i = 0 ; i < Arglist.size(); i++) {
                     arglist[i] = Arglist[i].c_str();
                 }
-                arglist[i] = NULL; 
-                //read arg//
-                int file_fd,data_fd[2];
-                char data_buf[MAXLINE] = {0};
-               	  
+                arglist[i] = NULL;
+
+    
+                if(Arglist[0] == "exit") {
+                    close(connfd);
+        	    	goto serv_next;            
+                }
                 if(Arglist[0] == "setenv") {
                     if(arglist[2] != NULL) setenv(arglist[1],arglist[2], 1);
                     break;
                 }
                 if(Arglist[0] != "printenv") {
-                    string syspath(getenv("PATH"));
-                    int found_pos = 0,found = 0,test_fd = -1;
-                    
-                    while((found_pos = syspath.find(":")) != string::npos) {
-                        if((test_fd = open((syspath.substr(0,found_pos)+"/"+Arglist[0]).c_str(),O_RDONLY)) > 0) {
-                            found = 1;
-                            break;
-                        }
-                        syspath = syspath.substr(found_pos+1);
-                    }
-                    if(!found && found_pos == string::npos) {
-                        if((test_fd = open((syspath+"/"+Arglist[0]).c_str(),O_RDONLY)) > 0) {
-                            found = 1;
-                        }
-                    }
-                    if(!found) {
+                	if(cnt == count) {
                         string str("Unknown command: [" + Arglist[0] + "].\n");
                         memcpy(response, str.c_str(), str.size());
                         write(connfd, response, str.size());
-                        if(notremove.find(step) == notremove.end()) {
-                            pipe_table.remove_pipe(step);
-                        }
                         if(!first) step--;
-                    }
-                    if(first) first = 0;
-                    if(!found) break;
-                 
-                    close(test_fd);
+	                    break;
+	                }
                 }
-                
+                 
+                //read arg//
+                int file_fd,data_fd[2];
+                char data_buf[MAXLINE] = {0};
+
                 if(s == PIPE){
                     
                     if(pipe_table.find(step+next) == pipe_table.end()) {
