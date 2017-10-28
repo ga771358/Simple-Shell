@@ -27,7 +27,7 @@ public:
 	        erase(it);
 	    }
 	}
-	~MyMap(){
+	~MyMap() {
 		map<int, pair<int,int> >::iterator it = begin();
 	    while(it != end()){
 	    	close(it->second.first);
@@ -53,7 +53,7 @@ int TcpListen(struct sockaddr_in* servaddr,socklen_t servlen,int port){
     return listenfd;
 }
 
-int readline(int sockfd,char* ptr){
+int readline(int sockfd,char* ptr) {
     while(read(sockfd, ptr, 1) > 0) {
         if(*ptr !='\n') ++ptr;
         else {
@@ -85,9 +85,8 @@ int main(int argc, char* argv[], char* envp[]){
     while(true) {
         
 serv_next:
-        int step = 0, next, first;
+        int step = 0, next;
         MyMap pipe_table;
-        map<int,bool> notremove;
         enum state{ PIPE , END , FILE };
 	  
         int connfd = accept(listenfd, (struct sockaddr *) &cli_addr, &clilen);
@@ -137,12 +136,11 @@ serv_next:
                 step++, cnt++;
                 vector<string> Arglist;
                 state s = END;
-               
+              
                 do {
                     if(tok[0] == '|') {
                         if(tok.size() != 1) {
                             next = atoi(tok.substr(1,tok.size()-1).c_str());
-                            notremove[step+next] = 1;
                         }
                         else {
                         	next = 1;
@@ -160,11 +158,7 @@ serv_next:
                     }
                     else s = FILE;
                 }
-                while(line >> tok); 
-
-                first = 0;
-                
-                if(tok == "|" && count == cnt + 1) continue;
+                while(line >> tok);
 
                 if(Arglist.empty()) continue;
 
@@ -193,7 +187,13 @@ serv_next:
 	                    break;
 	                }
                 }
-                 
+                
+                first = 0;
+                
+                if(tok == "|" && count == cnt + 1) {
+                	pipe_table.remove_pipe(step);
+                	continue;
+                }
                 //read arg//
                 int file_fd,data_fd[2];
                 char data_buf[MAXLINE] = {0};
@@ -263,7 +263,7 @@ serv_next:
                     int status = -1;
                     wait(&status);
                     if(WEXITSTATUS(status) > 0) break;
-                    cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
+                    //cout << "The exit code of " << Arglist[0] << " is " << WEXITSTATUS(status) << endl;
                 }
             }
         }
