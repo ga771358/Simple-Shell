@@ -17,7 +17,7 @@ using namespace std;
 #define MAXLINE 15000
 #define MAXCONN 1000
 
-class MyMap: public map<int,pair<int,int > >{
+class MyMap: public map<int,pair<int,int > > {
 public:
 	void remove_pipe(int pos) {
 		map<int, pair<int,int> >::iterator it;
@@ -211,7 +211,7 @@ serv_next:
                     
                 }
                 else if(s == FILE) {
-                    file_fd = open(tok.c_str(), O_RDWR | O_CREAT, 0666);
+                    file_fd = open(tok.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0666);
                     if(file_fd < 0) break;
                 }
                 else pipe(data_fd);
