@@ -139,12 +139,13 @@ serv_next:
               
                 do {
                     if(tok[0] == '|') {
-                        
                         if(tok.size() != 1) {
                             next = atoi(tok.substr(1,tok.size()-1).c_str());
                         }
-                        else 
+                        else {
                         	next = 1;
+                        	if(count == cnt + 1) break;
+                        }
                         
                         s = PIPE;
                         break;
@@ -188,24 +189,24 @@ serv_next:
                 }
                 
                 first = 0;
-                int dont_create_pipe = 0;
-
-                if(tok == "|" && count == cnt + 1) dont_create_pipe = 1;
                 
+                if(tok == "|" && count == cnt + 1) {
+                	pipe_table.remove_pipe(step);
+                	continue;
+                }
                 //read arg//
                 int file_fd,data_fd[2];
                 char data_buf[MAXLINE] = {0};
 
                 if(s == PIPE){
-                    if(!dont_create_pipe) {
-                        if(pipe_table.find(step+next) == pipe_table.end()) {
-                            pipe(data_fd);
-                            pipe_table[step+next] = pair<int,int>(data_fd[0],data_fd[1]);
-                        }
-                        else {
-                            data_fd[0] = pipe_table[step+next].first;
-                            data_fd[1] = pipe_table[step+next].second;
-                        }
+                    
+                    if(pipe_table.find(step+next) == pipe_table.end()) {
+                        pipe(data_fd);
+                        pipe_table[step+next] = pair<int,int>(data_fd[0],data_fd[1]);
+                    }
+                    else {
+                        data_fd[0] = pipe_table[step+next].first;
+                        data_fd[1] = pipe_table[step+next].second;
                     }
                     
                 }
@@ -217,19 +218,13 @@ serv_next:
                
                 pid_t pid = fork();
                 if(pid == 0) {
-                    int spec_pipe[2];
-                    pipe(spec_pipe);
                     
                     if(pipe_table.find(step) != pipe_table.end()) {
                         dup2(pipe_table[step].first, 0);
                         close(pipe_table[step].second);
                     }
                     
-                    if(s == PIPE || s == END) {
-                        if(!dont_create_pipe) dup2(data_fd[1],1);
-                        else dup2(spec_pipe[1],1);
-
-                    }
+                    if(s == PIPE || s == END) dup2(data_fd[1],1);
                     else if(s == FILE) dup2(file_fd,1);
                     
                     dup2(connfd, 2);
