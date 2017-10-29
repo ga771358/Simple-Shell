@@ -217,8 +217,6 @@ serv_next:
                
                 pid_t pid = fork();
                 if(pid == 0) {
-                    int spec_pipe[2];
-                    pipe(spec_pipe);
                     
                     if(pipe_table.find(step) != pipe_table.end()) {
                         dup2(pipe_table[step].first, 0);
@@ -226,9 +224,8 @@ serv_next:
                     }
                     
                     if(s == PIPE || s == END) {
-                        if(!dont_create_pipe) dup2(data_fd[1],1);
-                        else dup2(spec_pipe[1],1);
-
+                        if(dont_create_pipe) pipe(data_fd);
+                        dup2(data_fd[1],1);
                     }
                     else if(s == FILE) dup2(file_fd,1);
                     
